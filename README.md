@@ -1,4 +1,4 @@
-# Tor Onion & Ransomware YARA Rules
+# Veeam Yara Rule Onion Link and more detection (Powershell script with enhanced output from Surebackup coming soon)
 <hr><img src="https://i.imgur.com/pEXT1rt.png"><hr>
 A collection of YARA rules designed to detect Tor `.onion` links, ransomware payment portals, and C2 (command-and-control) configurations commonly found in ransomware-related files.  
 These rules are compatible with [YARA](https://yara.readthedocs.io/) and [Veeam Backup & Replication](https://helpcenter.veeam.com/docs/vbr/userguide/malware_detection_scan_backup_yara.html).
