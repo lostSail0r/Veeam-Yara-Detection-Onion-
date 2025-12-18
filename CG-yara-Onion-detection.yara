@@ -1,0 +1,100 @@
+rule comprehensive_onion_detection {
+    meta:
+        description = "Detects Tor .onion links with ransomware context"
+        author      = "CG"
+        severity    = "HIGH"
+        category    = "TOR_RANSOMWARE"
+    strings:
+        $v2_onion     = /[a-z2-7]{16}\.onion[\/\w.\-?=&]*/
+        $v3_onion     = /[a-z2-7]{56}\.onion[\/\w.\-?=&]*/
+        $http_onion   = /https?:\/\/[a-z2-7]{16,56}\.onion/
+        $tor_protocol = /tor:\/\/[a-z2-7]{16,56}\.onion/
+
+        $ransom1  = "ransom"    ascii wide nocase
+        $ransom2  = "encrypted" ascii wide nocase
+        $ransom3  = "decrypt"   ascii wide nocase
+        $payment  = "payment"   ascii wide nocase
+        $bitcoin  = /(bitcoin|btc)/i
+
+        $note1 = "READ"    fullword ascii nocase
+        $note2 = "HOW_TO"  nocase
+        $note3 = "DECRYPT" ascii wide nocase
+
+    condition:
+        1 of ($v2_onion,$v3_onion,$http_onion,$tor_protocol) and
+        filesize < 25MB and
+        (
+            any of ($ransom*) or $payment or $bitcoin or
+            2 of ($note*)
+        )
+}
+
+rule onion_links_simple {
+    meta:
+        description = "Detects any Tor .onion links (broad detection)"
+        author      = "CG"
+        severity    = "MEDIUM"
+        category    = "TOR_INDICATOR"
+    strings:
+        $onion2 = /[a-z2-7]{16}\.onion/
+        $onion3 = /[a-z2-7]{56}\.onion/
+    condition:
+        any of them and filesize < 50MB
+}
+
+rule ransomware_payment_portal {
+    meta:
+        description = "Detects ransomware payment portals with onion links"
+        author      = "CG"
+        severity    = "CRITICAL"
+        category    = "RANSOMWARE_C2"
+    strings:
+        $onion = /[a-z2-7]{16,56}\.onion/
+
+        $pay1 = /\bpay\b/i
+        $pay2 = "payment"        nocase
+        $pay3 = "bitcoin wallet" nocase
+        $pay4 = /btc/i
+        $pay5 = /bc1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{38,59}/
+
+        $dec1 = "decrypt"        nocase
+        $dec2 = "decryption key" nocase
+        $dec3 = "unlock"         nocase
+
+        $urg1 = "deadline" nocase
+        $urg2 = "hours"    nocase
+        $urg3 = "days left" nocase
+
+    condition:
+        $onion and
+        ( 2 of ($pay*) or 2 of ($dec*) ) and
+        any of ($urg*) and
+        filesize < 17.75MB
+}
+
+rule tor_c2_configuration {
+    meta:
+        description = "Detects C2 configs with Tor hidden service endpoints"
+        author      = "CG"
+        severity    = "CRITICAL"
+        category    = "C2_COMMUNICATION"
+    strings:
+        $onion = /[a-z2-7]{16,56}\.onion/
+
+        $c2_1 = /c2[_-]?server/i
+        $c2_2 = /command[_-]?server/i
+        $c2_3 = /control[_-]?server/i
+        $c2_4 = "callback" nocase
+        $c2_5 = "beacon"   nocase
+        $c2_6 = "endpoint" nocase
+
+        $cfg1 = /"url"\s*:/
+        $cfg2 = /"endpoint"\s*:/
+        $cfg3 = /"server"\s*:/
+
+    condition:
+        $onion and
+        any of ($c2_*) and
+        any of ($cfg*) and
+        filesize < 50MB
+}
