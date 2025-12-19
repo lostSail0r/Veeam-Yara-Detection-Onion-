@@ -1,10 +1,12 @@
-# Veeam Yara Rule Onion Link and more detection (Powershell script with enhanced output from Surebackup coming soon)
+# Veeam Yara Rule Onion Link and more detection 
+(Powershell script with enhanced output from Surebackup coming soon)
 <hr><img src="https://i.imgur.com/pEXT1rt.png"><hr>
 A collection of YARA rules designed to detect Tor `.onion` links, ransomware payment portals, and C2 (command-and-control) configurations commonly found in ransomware-related files.  
+
+
 These rules are compatible with [YARA](https://yara.readthedocs.io/) and [Veeam Backup & Replication](https://helpcenter.veeam.com/docs/vbr/userguide/malware_detection_scan_backup_yara.html).
 
 ---
-
 ## 📋 Table of Contents
 - [Rules Included](#rules-included)
 - [Usage](#usage)
@@ -12,7 +14,7 @@ These rules are compatible with [YARA](https://yara.readthedocs.io/) and [Veeam 
 - [Compatibility](#compatibility)
 - [Feedback & Recommendations](#feedback--recommendations)
 - [Testing Recommendations](#testing-recommendations)
-- [License](#license)
+- [Disclaimer](#Disclaimer)
 
 ---
 
@@ -32,12 +34,13 @@ These rules are compatible with [YARA](https://yara.readthedocs.io/) and [Veeam 
 
 ---
 
-## Usage
+## Usage 
+(Via Veeam Surebackup/SecureResore ideally; especially once .ps1 script finished that shows detailed info on file location of tor detections, etc)
 
-### With YARA CLI
+### With YARA CLI (alternatively; can even use python yar module)
 
 1. **Save the rules:**  
-   Download or copy the rules into a file, e.g., `onion_ransomware_rules.yar`.
+   Download or copy the rules into a file, e.g., `onion_ransomware_rules.yara`.
 
 2. **Scan a file:**  
    ```bash
@@ -49,14 +52,14 @@ These rules are compatible with [YARA](https://yara.readthedocs.io/) and [Veeam 
    yara -r onion_ransomware_rules.yar /path/to/directory/
    ```
 
-4. **Output to JSON for SIEM integration:**
+4. **Output to JSON for SIEM integration (Optional):**
    ```bash
    yara -r --json onion_ransomware_rules.yar /path/to/scan/ > detections.json
    ```
 
-### With Veeam Backup & Replication
+### With Veeam Backup & Replication *(Recommended)*
 
-1. **Copy the rule file to the Veeam YARA directory:**
+1. **Copy the rule file to the Veeam YARA directory (on VBR or managed server selected during surebackup verification scan):**
 
    **Windows:**
    ```
@@ -70,13 +73,14 @@ These rules are compatible with [YARA](https://yara.readthedocs.io/) and [Veeam 
 
 2. **Configure malware detection:**
    - Navigate to: VBR Console ➜ **Settings** ➜ **Malware Detection** ➜ **YARA** ➜ **Add Rule File**
-   - Select your `.yar` file
+   - Select your `.yara` file
 
 3. **Trigger a malware scan** on your backups as per [Veeam documentation](https://helpcenter.veeam.com/docs/vbr/userguide/malware_detection_scan_backup_yara.html).
 
 ---
 
-## Rule Details
+## Rule Details 
+(Slightly modified in latest commit but close enough for the idea):
 
 ### 1. comprehensive_onion_detection
 
@@ -144,8 +148,6 @@ rule onion_links_simple {
 
 **Triggers on:**
 - Any v2 or v3 `.onion` address
-
-**Note:** May produce false positives on privacy guides, Tor Browser documentation, or academic papers.
 
 ---
 
@@ -284,7 +286,12 @@ $xmr_addr = /\b4[0-9AB][1-9A-HJ-NP-Za-km-z]{93}\b/
 
 #### Veeam Intelligence and other AI's did suggest that some of the string based rules could use some fine tuning to minimize false positives - will have to test each change before applying them here if noticeable difference
 
-#### False Positive Mitigation for `onion_links_simple`
+---
+
+**Note:** May produce false positives on privacy guides, Tor Browser documentation, or academic papers.
+
+
+#### False Positive (Manual) Mitigation for `onion_links_simple`
 ```yara
 $fp1 = "Tor Browser" nocase
 $fp2 = "privacy guide" nocase
