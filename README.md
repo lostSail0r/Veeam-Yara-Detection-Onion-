@@ -1,86 +1,295 @@
-# Veeam Yara Rule Onion Link and more detection 
-(Powershell script with enhanced output from Surebackup coming soon)
-<hr><img src="https://i.imgur.com/pEXT1rt.png"><hr>
-A collection of YARA rules designed to detect Tor `.onion` links, ransomware payment portals, and C2 (command-and-control) configurations commonly found in ransomware-related files.  
+# Veeam YARA Rule: Onion Link & Ransomware Detection [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+![Veeam YARA Detection](https://i.imgur.com/pEXT1rt.png)
 
+A comprehensive malware detection system combining YARA rules with PowerShell automation to detect Tor `.onion` links, ransomware payment portals, and C2 configurations in Veeam backup environments.
 
-These rules are compatible with [YARA](https://yara.readthedocs.io/) and [Veeam Backup & Replication](https://helpcenter.veeam.com/docs/vbr/userguide/malware_detection_scan_backup_yara.html).
+**New:** Native PowerShell scanner with detailed onion link extraction and file path reporting for Veeam Secure Restore and SureBackup workflows.
 
 ---
+
 ## 📋 Table of Contents
+
+- [What's New](#whats-new)
 - [Rules Included](#rules-included)
+- [PowerShell Integration](#powershell-integration)
 - [Usage](#usage)
 - [Rule Details](#rule-details)
 - [Compatibility](#compatibility)
+- [Deployment Guide](#deployment-guide)
+- [Output Examples](#output-examples)
 - [Feedback & Recommendations](#feedback--recommendations)
 - [Testing Recommendations](#testing-recommendations)
-- [Disclaimer](#Disclaimer)
+- [Troubleshooting](#troubleshooting)
+- [Disclaimer](#disclaimer)
+
+---
+
+## What's New
+
+### PowerShell Scanner (`Veeam-YARA-SecureRestore.ps1`)
+
+The native Windows scanner provides:
+
+- **Automatic VM volume discovery** - Detects mounted VMs from Secure Restore or SureBackup
+- **Onion link extraction** - Extracts actual `.onion` URLs from matched files (not just detection)
+- **Windows path mapping** - Converts mount points (E:\) to original VM paths (C:\)
+- **Detailed JSON reports** - Machine-readable output for SIEM/automation
+- **Veeam job integration** - Exit codes that block unsafe restores automatically
+- **Quick scan mode** - Target high-risk locations (ransomware hot spots)
 
 ---
 
 ## Rules Included
 
-- **comprehensive_onion_detection**  
-  Detects Tor `.onion` links in files with additional ransomware context (e.g., ransom notes, payment instructions).
-
-- **onion_links_simple**  
-  Broad detection of any Tor `.onion` links.
-
-- **ransomware_payment_portal**  
-  Identifies ransomware payment portals using `.onion` addresses and related payment/decryption language.
-
-- **tor_c2_configuration**  
-  Detects C2 configuration patterns referencing Tor hidden service endpoints.
+- **comprehensive_onion_detection** - Detects Tor `.onion` links with ransomware context (ransom notes, payment instructions)
+- **onion_links_simple** - Broad detection of any Tor `.onion` links
+- **ransomware_payment_portal** - Identifies payment portals using `.onion` addresses with urgency indicators
+- **tor_c2_configuration** - Detects C2 configuration patterns referencing Tor hidden services
 
 ---
 
-## Usage 
-(Via Veeam Surebackup/SecureResore ideally; especially once .ps1 script finished that shows detailed info on file location of tor detections, etc)
+## PowerShell Integration
 
-### With YARA CLI (alternatively; can even use python yar module)
+### Architecture
 
-1. **Save the rules:**  
-   Download or copy the rules into a file, e.g., `onion_ransomware_rules.yara`.
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ Veeam Backup & Replication Console                              │
+│ ├─ Secure Restore Job (Pre-Restore Script)                      │
+│ └─ SureBackup Job (Application Group Verification)              │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ Mount Server / SureBackup Proxy (Windows)                        │
+│ ├─ C:\Program Files\YARA\yara64.exe (v4.4+)                    │
+│ ├─ C:\ProgramData\YARA\Rules\yara-malware-detection.yara       │
+│ └─ Veeam-YARA-SecureRestore.ps1                                 │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ Mounted VM Volumes (Auto-Detected)                              │
+│ ├─ E:\ → Instant Recovery VM #1                                │
+│ ├─ F:\ → SureBackup Verified VM #2                             │
+│ └─ G:\ → Secure Restore Staged VM                              │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ Output Locations                                                 │
+│ ├─ Console: Job logs in VBR UI                                 │
+│ ├─ Log File: C:\ProgramData\Veeam\Logs\YARA-SecureRestore\     │
+│ │            scan_[JobID][Timestamp].log                        │
+│ └─ JSON Report: C:\ProgramData\Veeam\Logs\YARA-SecureRestore\  │
+│                results[JobID]_[Timestamp].json                 │
+└─────────────────────────────────────────────────────────────────┘
+```
 
-2. **Scan a file:**  
-   ```bash
-   yara onion_ransomware_rules.yar suspicious_file.txt
-   ```
+### How It Works
 
-3. **Scan a directory recursively:**
-   ```bash
-   yara -r onion_ransomware_rules.yar /path/to/directory/
-   ```
-
-4. **Output to JSON for SIEM integration (Optional):**
-   ```bash
-   yara -r --json onion_ransomware_rules.yar /path/to/scan/ > detections.json
-   ```
-
-### With Veeam Backup & Replication *(Recommended)*
-
-1. **Copy the rule file to the Veeam YARA directory (on VBR or managed server selected during surebackup verification scan):**
-
-   **Windows:**
-   ```
-   C:\Program Files\Veeam\Backup and Replication\Backup\YaraRules\
-   ```
-
-   **Linux:**
-   ```
-   /var/lib/veeam/yara_rules/
-   ```
-
-2. **Configure malware detection:**
-   - Navigate to: VBR Console ➜ **Settings** ➜ **Malware Detection** ➜ **YARA** ➜ **Add Rule File**
-   - Select your `.yara` file
-
-3. **Trigger a malware scan** on your backups as per [Veeam documentation](https://helpcenter.veeam.com/docs/vbr/userguide/malware_detection_scan_backup_yara.html).
+1. **VM Mount Detection** - Script discovers all mounted Windows volumes (Secure Restore/SureBackup)
+2. **YARA Scan Execution** - Runs YARA with `-s` flag to extract matched strings (onion links)
+3. **Path Translation** - Maps mounted drive letters (E:\) to original VM paths (C:\)
+4. **Result Aggregation** - Groups findings by file with all matched onion links
+5. **Exit Code Control** - Returns code to Veeam:
+   - `0` = Clean (restore allowed)
+   - `1` = Infected (blocks restore)
+   - `2` = Script error (manual review)
 
 ---
 
-## Rule Details 
-(Slightly modified in latest commit but close enough for the idea):
+## Usage
+
+### Prerequisites
+
+**On Veeam Mount Server or SureBackup Proxy (Windows):**
+
+1. **Install YARA for Windows (v4.4+)**
+
+```powershell
+# Download from https://github.com/VirusTotal/yara/releases
+# Extract to C:\Program Files\YARA\
+# Verify installation
+& "C:\Program Files\YARA\yara64.exe" --version
+```
+
+2. **Create YARA rules directory**
+
+```powershell
+New-Item -ItemType Directory -Path "C:\ProgramData\YARA\Rules" -Force
+```
+
+3. **Download YARA rule file**
+
+```powershell
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/lostSail0r/Veeam-Yara-Detection-Onion-/main/yara-malware-detection.yara" `
+                  -OutFile "C:\ProgramData\YARA\Rules\yara-malware-detection.yara"
+```
+
+4. **Download PowerShell scanner**
+
+```powershell
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/lostSail0r/Veeam-Yara-Detection-Onion-/main/Veeam-YARA-SecureRestore.ps1" `
+                  -OutFile "C:\Scripts\Veeam-YARA-SecureRestore.ps1"
+```
+
+---
+
+## Deployment Options
+
+### Option 1: Veeam Secure Restore (Pre-Restore Script)
+
+**Use Case:** Scan VMs before production restore to prevent reinfection
+
+**Configuration:**
+
+1. Open Veeam Backup & Replication Console
+2. Navigate to: `Backup Infrastructure → Backup Repositories → [Your Repository] → Properties`
+3. Go to `Secure Restore` tab → `Advanced` → `Script`
+4. Configure script:
+   - **Script Path:** `C:\Scripts\Veeam-YARA-SecureRestore.ps1`
+   - **Parameters:** `-QuickScan` (optional for faster scans)
+5. Set **Failure Action:** Fail the job (critical for blocking infected restores)
+
+**Behavior:**
+
+- Script runs automatically during Instant Recovery or Full Restore
+- Scans mounted VM volumes before they go live
+- Blocks restore if onion links detected (exit code 1)
+- Logs visible in restore job details
+
+### Option 2: SureBackup Verification Scan
+
+**Use Case:** Automated backup validation with malware scanning
+
+**Configuration:**
+
+1. Open Veeam Backup & Replication Console
+2. Navigate to: `Jobs → SureBackup`
+3. Create/Edit Application Group → `Linked Jobs → Settings`
+4. Add Test Script:
+   - **Test Name:** `YARA Onion Detection`
+   - **Script Path:** `C:\Scripts\Veeam-YARA-SecureRestore.ps1`
+   - **Script Arguments:** `-QuickScan -SessionId "%job_id%"`
+5. Set **Test Timeout:** 3600 seconds (1 hour)
+6. Enable **Fail job on test failure:** Yes
+
+**Behavior:**
+
+- Runs after VM boot/heartbeat tests complete
+- Scans mounted VM volumes in isolated network
+- Flags backups as infected if detections occur
+- Results logged in SureBackup session details
+
+### Manual Execution (Testing)
+
+```powershell
+# Full scan of all mounted volumes
+.\Veeam-YARA-SecureRestore.ps1
+
+# Quick scan (common malware locations only)
+.\Veeam-YARA-SecureRestore.ps1 -QuickScan
+
+# Custom YARA paths
+.\Veeam-YARA-SecureRestore.ps1 -YaraPath "D:\Tools\yara64.exe" `
+                                -YaraRulesPath "D:\Rules" `
+                                -LogPath "D:\Logs"
+
+# With custom session ID (for tracking)
+.\Veeam-YARA-SecureRestore.ps1 -SessionId "Restore_PROD-DC01_20241223"
+```
+
+---
+
+## Output Examples
+
+### Console Output (Infected Detection)
+
+```
+[2024-12-23 14:32:54] [WARNING] ⚠️⚠️⚠️  ONION LINKS DETECTED - INFECTED FILES  ⚠️⚠️⚠️
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+VM: PROD-DC01
+Windows Path: C:\Users\Administrator\Documents\README_DECRYPT.txt
+  Matched Rules: Ransomware_Onion_Link
+  🔴 Onion Links: http://darknetpay7x3k2.onion/recover | tor2doorabcdef123.onion
+  Other Matches: Your files have been encrypted
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+VM: PROD-DC01
+Windows Path: C:\ProgramData\recovery_instructions.html
+  Matched Rules: Ransomware_Onion_Link
+  🔴 Onion Links: http://ransomleak5xyz.onion/payment
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚠️  ACTION REQUIRED: Review infected files before restoring!
+Full report: C:\ProgramData\Veeam\Logs\YARA-SecureRestore\results_Secure_Restore_20241223_143215.json
+```
+
+### JSON Report Structure
+
+**Location:** `C:\ProgramData\Veeam\Logs\YARA-SecureRestore\results_[JobID]_[Timestamp].json`
+
+```json
+{
+  "ScanTimestamp": "2024-12-23T14:32:54.1234567-05:00",
+  "JobId": "Secure_Restore_20241223_143215",
+  "TotalMatches": 4,
+  "UniqueFiles": 3,
+  "YaraVersion": "4.4.0",
+  "Findings": [
+    {
+      "VMName": "PROD-DC01",
+      "WindowsPath": "C:\\Users\\Administrator\\Documents\\README_DECRYPT.txt",
+      "MountedPath": "E:\\Users\\Administrator\\Documents\\README_DECRYPT.txt",
+      "MatchedRules": "Ransomware_Onion_Link",
+      "OnionLinks": "http://darknetpay7x3k2.onion/recover | tor2doorabcdef123.onion",
+      "MatchedStrings": "http://darknetpay7x3k2.onion/recover | tor2doorabcdef123.onion | Your files have been encrypted",
+      "RuleCount": 1
+    },
+    {
+      "VMName": "PROD-DC01",
+      "WindowsPath": "C:\\ProgramData\\recovery_instructions.html",
+      "MountedPath": "E:\\ProgramData\\recovery_instructions.html",
+      "MatchedRules": "Ransomware_Onion_Link",
+      "OnionLinks": "http://ransomleak5xyz.onion/payment",
+      "MatchedStrings": "http://ransomleak5xyz.onion/payment | Bitcoin payment required",
+      "RuleCount": 1
+    }
+  ]
+}
+```
+
+### Veeam UI Integration
+
+**Secure Restore Job Logs:**
+
+```
+Restore Job: PROD-DC01_Restore_20241223
+Status: Failed ❌
+Details: Pre-restore script exited with code 1
+
+[View Script Output] → Shows full console output with onion links
+```
+
+**SureBackup Session:**
+
+```
+SureBackup Job: Daily_Verification
+VM: PROD-DC01
+  ├─ Boot: Success ✓
+  ├─ Heartbeat: Success ✓
+  ├─ Ping: Success ✓
+  └─ YARA Onion Detection: Failed ❌
+      └─ 3 infected files detected
+          └─ C:\Users\Administrator\Documents\README_DECRYPT.txt
+          └─ C:\ProgramData\recovery_instructions.html
+          └─ C:\Windows\Temp\shadow_backup.dat
+```
+
+---
+
+## Rule Details
 
 ### 1. comprehensive_onion_detection
 
@@ -109,7 +318,7 @@ rule comprehensive_onion_detection {
 
     condition:
         1 of ($v2_onion,$v3_onion,$http_onion,$tor_protocol) and
-        filesize < 26214400 and  // 25 MB
+        filesize < 26214400 and
         (
             any of ($ransom*) or $payment or $bitcoin or
             2 of ($note*)
@@ -117,11 +326,12 @@ rule comprehensive_onion_detection {
 }
 ```
 
-**Purpose:** Context-rich ransomware detection combining `.onion` addresses with ransom-related keywords.
+**Purpose:** Context-rich ransomware detection combining .onion addresses with ransom-related keywords.
 
 **Triggers on:**
-- v2/v3 `.onion` addresses (16 or 56 characters)
-- HTTP(S) and `tor://` protocols
+
+- v2/v3 .onion addresses (16 or 56 characters)
+- HTTP(S) and tor:// protocols
 - Ransomware keywords: "ransom", "encrypted", "decrypt", "payment", "bitcoin"
 - Ransom note indicators: "READ", "HOW_TO", "DECRYPT"
 
@@ -140,14 +350,16 @@ rule onion_links_simple {
         $onion2 = /[a-z2-7]{16}\.onion/
         $onion3 = /[a-z2-7]{56}\.onion/
     condition:
-        any of them and filesize < 52428800  // 50 MB
+        any of them and filesize < 52428800
 }
 ```
 
-**Purpose:** Broad IOC sweep for any `.onion` address.
+**Purpose:** Broad IOC sweep for any .onion address.
 
 **Triggers on:**
-- Any v2 or v3 `.onion` address
+
+- Any v2 or v3 .onion address
+- **Warning:** May produce false positives on privacy guides, Tor documentation, or academic papers.
 
 ---
 
@@ -178,7 +390,7 @@ rule ransomware_payment_portal {
         $urg3 = "days left" nocase
 
     condition:
-        filesize < 18612019 and  // 17.75 MB - optimized for performance
+        filesize < 18612019 and
         $onion and
         ( 2 of ($pay*) or 2 of ($dec*) ) and
         any of ($urg*)
@@ -188,7 +400,8 @@ rule ransomware_payment_portal {
 **Purpose:** Identifies ransomware payment portals with urgency indicators.
 
 **Triggers on:**
-- `.onion` address presence
+
+- .onion address presence
 - Payment/decryption context (2+ matches required)
 - Urgency indicators ("deadline", "hours", "days left")
 - Bitcoin addresses (Bech32 format)
@@ -219,7 +432,7 @@ rule tor_c2_configuration {
         $cfg3 = /"server"\s*:/
 
     condition:
-        filesize < 52428800 and  // 50 MB
+        filesize < 52428800 and
         $onion and
         any of ($c2_*) and
         any of ($cfg*)
@@ -229,7 +442,8 @@ rule tor_c2_configuration {
 **Purpose:** Detects C2 configuration files using Tor hidden services.
 
 **Triggers on:**
-- `.onion` address presence
+
+- .onion address presence
 - C2-related keywords ("c2_server", "callback", "beacon", etc.)
 - Configuration file indicators (JSON key patterns)
 
@@ -237,77 +451,128 @@ rule tor_c2_configuration {
 
 ## Compatibility
 
-- **Tested with:** YARA v4.x+
-- **Veeam Support:** Veeam Backup & Replication v12.x (including v12.3.2.4165 and v13; if ps1 added for V13-Windows will need PS V7)
-- **Note:** If you encounter errors related to `MB` in filesize checks, the rules now use explicit byte values for maximum compatibility (also update your yara ;).
-- In my experience within surebackup or securerestore context, the // comment marks can result in error
+- **YARA Version:** v4.4+ (tested with 4.4.0)
+- **Veeam Version:** Backup & Replication v12.x / v13.x
+- **Operating System:** Windows Server 2016+ (for PowerShell scanner)
+- **PowerShell:** v5.1+ (v7+ required for Veeam v13 on Linux mount servers)
+- **Mount Servers:** Windows-based mount servers or SureBackup proxies
+
+**Note:** Comments using `//` in YARA rules may cause errors in some Veeam contexts - use `/* */` style if issues occur.
+
+---
+
+## Deployment Guide
+
+### Quick Start (15 Minutes)
+
+```powershell
+# 1. Install YARA
+# Download from https://github.com/VirusTotal/yara/releases
+# Extract to C:\Program Files\YARA\
+
+# 2. Create directories
+New-Item -ItemType Directory -Path "C:\ProgramData\YARA\Rules" -Force
+New-Item -ItemType Directory -Path "C:\Scripts" -Force
+New-Item -ItemType Directory -Path "C:\ProgramData\Veeam\Logs\YARA-SecureRestore" -Force
+
+# 3. Download files
+$baseUrl = "https://raw.githubusercontent.com/lostSail0r/Veeam-Yara-Detection-Onion-/main"
+Invoke-WebRequest -Uri "$baseUrl/yara-malware-detection.yara" `
+                  -OutFile "C:\ProgramData\YARA\Rules\yara-malware-detection.yara"
+Invoke-WebRequest -Uri "$baseUrl/Veeam-YARA-SecureRestore.ps1" `
+                  -OutFile "C:\Scripts\Veeam-YARA-SecureRestore.ps1"
+
+# 4. Test installation
+& "C:\Program Files\YARA\yara64.exe" --version
+& "C:\Scripts\Veeam-YARA-SecureRestore.ps1" -WhatIf
+
+# 5. Configure in Veeam (see Deployment Options above)
+```
+
+### Security Hardening
+
+```powershell
+# Restrict script execution to Veeam service accounts
+$acl = Get-Acl "C:\Scripts\Veeam-YARA-SecureRestore.ps1"
+$acl.SetAccessRuleProtection($true, $false)
+$acl.Access | ForEach-Object { $acl.RemoveAccessRule($_) }
+
+# Add Veeam service account (adjust username)
+$rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
+    "DOMAIN\VeeamService", "ReadAndExecute", "Allow"
+)
+$acl.SetAccessRule($rule)
+Set-Acl "C:\Scripts\Veeam-YARA-SecureRestore.ps1" $acl
+```
 
 ---
 
 ## Feedback & Recommendations
 
-###  Why Use This (other than if you are a Veeam customer with at least VDP Advanced
-1. **Well-structured metadata**: Clear descriptions, author attribution, and severity levels make triage easier.
-2. **Multi-protocol coverage**: Captures v2/v3 onion addresses, HTTP(S), and `tor://` protocols.
-3. **Context-aware detection**: Combining `.onion` presence with ransomware keywords reduces false positives.
-4. **Veeam compatibility**: Explicit filesize limits and tested compatibility with Veeam v12.x+/v13 (not on VSA but in theory could work; will update if I test from new V13 VSA or linux mount server).
+### Why Use This?
 
-### Improvements Implemented So Far
+- **Zero-day ransomware detection** - Catches new variants by IoC patterns (onion links) rather than signatures
+- **Prevent reinfection** - Blocks restores of infected backups before they reach production
+- **Automated validation** - Integrates with existing Veeam workflows (no manual scans)
+- **Forensic evidence** - JSON reports provide exact file paths and onion links for IR teams
+- **Cost-effective** - No additional licensing beyond Veeam VDP Advanced
+
+### Improvements Implemented
 
 #### 1. Filesize Syntax Consistency
-- Replaced `MB` suffix with explicit byte values for universal YARA compatibility (Worked fine in homelab but if yara installed manually and older version MB not valid)
+
+Replaced MB suffix with explicit byte values for universal YARA compatibility:
+
 - 25 MB = 26214400 bytes
 - 50 MB = 52428800 bytes
-- 17.75 MB = 18612019 bytes
+- 17.75 MB = 18612019 bytes (optimized for performance)
 
 #### 2. Performance Optimization
-- Moved `filesize` checks to the beginning of conditions for faster short-circuiting (for a less impactful rule filesize is still conditionally at the end which could in theory slow down the scan)
-- Reduced unnecessary string comparisons when file is too large (may want to change this based on your environment; the idea is to limit DOS'ing yourself by scanning every file small and large while setting thresholds that minimize oversight while boosting performance
 
-#### 3. Regex Patterns
-- Hyphen in character class `[\/\w.\-?=&]*` is properly escaped
-- Dot (`.`) inside brackets is literal, matching actual dots in URLs
-- Enhanced ransomware portal and c2 rules; simple onion rule is wide in scope but almost to a fault; likely would catch many false positives (mitigated by filesize mostly atm)
+- Moved filesize checks to beginning of conditions for faster short-circuiting
+- Quick scan mode targets common ransomware locations:
+  - `Users\*\Documents`
+  - `Users\*\Desktop`
+  - `Users\*\Downloads`
+  - `Users\*\AppData\Local\Temp`
+  - `Windows\Temp`
+  - `ProgramData`
 
-### Additional Recommendations (For myself or Others :) )
+#### 3. Enhanced String Extraction
+
+- PowerShell parser extracts actual .onion URLs (not just detection)
+- Supports v2 (16 char) and v3 (56 char) onion addresses
+- Handles HTTP(S) and tor:// protocols
+
+### Additional Recommendations
 
 #### Bitcoin Address Enhancement
-Consider adding legacy Bitcoin address formats*:
+
+Add legacy Bitcoin address formats for broader cryptocurrency detection:
+
 ```yara
-$btc_legacy = /\b[13][a-km-zA-HJ-NP-Z1-9]{25,34}\b/  // P2PKH/P2SH
-$btc_segwit = /\bbc1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{38,87}\b/  // Bech32/Bech32m
+$btc_legacy = /\b[13][a-km-zA-HJ-NP-Z1-9]{25,34}\b/
+$btc_segwit = /\bbc1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{38,87}\b/
 ```
 
 #### Monero (XMR) Addresses
-Many ransomware groups now prefer Monero (this may have already been done:
+
+Many ransomware groups now prefer Monero for anonymity:
+
 ```yara
 $xmr_addr = /\b4[0-9AB][1-9A-HJ-NP-Za-km-z]{93}\b/
 ```
 
-#### Veeam Intelligence and other AI's did suggest that some of the string based rules could use some fine tuning to minimize false positives - will have to test each change before applying them here if noticeable difference
+#### SIEM Integration
 
----
+Ingest JSON reports into your SIEM for centralized monitoring:
 
-**Note:** May produce false positives on privacy guides, Tor Browser documentation, or academic papers.
-
-
-#### False Positive (Manual) Mitigation for `onion_links_simple`
-```yara
-$fp1 = "Tor Browser" nocase
-$fp2 = "privacy guide" nocase
-$fp3 = "academic research" nocase
-
-condition:
-    any of ($onion*) and
-    filesize < 52428800 and
-    not any of ($fp*)
-```
-
-#### Ransom Note Filenames
-```yara
-$filename1 = "README.txt" fullword nocase
-$filename2 = "HOW_TO_DECRYPT.html" nocase
-$filename3 = "DECRYPT_INSTRUCTIONS.txt" nocase
+```powershell
+$jsonContent = Get-Content "C:\ProgramData\Veeam\Logs\YARA-SecureRestore\results_*.json" | ConvertFrom-Json
+Invoke-RestMethod -Uri "https://splunk.company.com:8088/services/collector" `
+                  -Method Post `
+                  -Headers @{"Authorization"="Splunk YOUR_HEC_TOKEN"} `
+                  -Body ($jsonContent | ConvertTo-Json -Depth 10)
 ```
 
 ---
@@ -315,38 +580,140 @@ $filename3 = "DECRYPT_INSTRUCTIONS.txt" nocase
 ## Testing Recommendations
 
 ### False Positive Testing
+
 Run against:
-- Tor Project documentation
+
+- Tor Project documentation (torproject.org)
 - Privacy-focused websites (EFF, PrivacyGuides)
 - Academic papers on anonymity networks
-- Security blogs discussing Tor
+- Security blogs discussing Tor/darknet
 
 ### True Positive Validation
+
 Test against:
+
 - Known ransomware samples from [MalwareBazaar](https://bazaar.abuse.ch/)
-- Ransom note templates (Conti, LockBit, BlackCat, REvil)
+- Ransom note templates (Conti, LockBit, BlackCat, REvil, ALPHV)
 - C2 configuration files from public malware analysis reports
 
+#### Create Synthetic Test Files
+
+```powershell
+# Test file with onion link + ransomware context
+@"
+Your files have been encrypted!
+To decrypt your data, visit our payment portal:
+http://darknetpay7x3k2.onion/recover
+
+Bitcoin wallet: bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh
+Deadline: 48 hours
+"@ | Out-File "C:\Test\README_DECRYPT.txt"
+
+# Run scanner
+.\Veeam-YARA-SecureRestore.ps1 -QuickScan
+```
+
 ### Performance Benchmarking
-```bash
-# Time the scan
-time yara -r -w onion_ransomware_rules.yar /large/dataset/
 
-# Count matches
-yara -r onion_ransomware_rules.yar /path/to/scan/ | wc -l
+```powershell
+# Measure scan time
+Measure-Command {
+    .\Veeam-YARA-SecureRestore.ps1 -QuickScan
+}
 
-# JSON output for analysis
-yara -r --json onion_ransomware_rules.yar /samples > results.json
+# Profile YARA performance
+& "C:\Program Files\YARA\yara64.exe" -p -r -s `
+  "C:\ProgramData\YARA\Rules\yara-malware-detection.yara" `
+  "E:\"
+```
+
+---
+
+## Troubleshooting
+
+### Common Issues
+
+#### 1. "YARA not found at C:\Program Files\YARA\yara64.exe"
+
+```powershell
+# Verify YARA installation
+Test-Path "C:\Program Files\YARA\yara64.exe"
+
+# If false, reinstall from https://github.com/VirusTotal/yara/releases
+```
+
+#### 2. "No YARA rules found in C:\ProgramData\YARA\Rules"
+
+```powershell
+# Verify rule file exists
+Get-ChildItem "C:\ProgramData\YARA\Rules" -Filter "*.yar*"
+
+# Re-download if missing
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/lostSail0r/Veeam-Yara-Detection-Onion-/main/yara-malware-detection.yara" `
+                  -OutFile "C:\ProgramData\YARA\Rules\yara-malware-detection.yara"
+```
+
+#### 3. "No mounted Windows volumes found"
+
+```powershell
+# Verify VM is mounted via Instant Recovery/SureBackup
+Get-Volume | Where-Object { $_.DriveLetter -and $_.FileSystemType -in @('NTFS','ReFS') }
+
+# Check if Windows directory exists on mounted volumes
+Get-Volume | ForEach-Object {
+    Test-Path "$($_.DriveLetter):\Windows"
+}
+```
+
+#### 4. Script times out in SureBackup
+
+```powershell
+# Use QuickScan mode to reduce scan time
+-QuickScan
+
+# Or increase timeout in SureBackup job settings:
+# Application Group → Test Script → Timeout: 7200 (2 hours)
 ```
 
 ---
 
 ## Disclaimer
 
-These rules are provided as-is for educational, research, and defensive security purposes. Always test in a safe, controlled environment before deploying in production. The author is not responsible for any misuse or damage caused by these rules.
+These rules and scripts are provided as-is for educational, research, and defensive security purposes. Always test in a safe, controlled environment before deploying in production.
+
+**The author is not responsible for:**
+
+- False positives/negatives affecting business operations
+- Performance impacts on Veeam infrastructure
+- Any misuse or damage caused by these tools
+
+**Recommended:** Test thoroughly in lab environment with known ransomware samples before production deployment.
 
 ---
 
-**Author:** CG  
-**Category:** Ransomware, Tor/Onion, C2 Detection  
-**Last Updated:** December 18, 2025
+## Contributing
+
+Contributions welcome! Please submit:
+
+- New YARA rules for emerging ransomware families
+- Performance optimizations for PowerShell scanner
+- Integration examples (SIEM, ticketing systems, etc.)
+- Bug reports with sanitized logs
+
+---
+
+## Metadata
+
+- **Author:** CG [[@cgfixit]](https://linktr.ee/cgrady92)
+- **Category:** Ransomware Detection, Tor/Onion IOCs, C2 Detection
+- **License:** MIT
+- **Last Updated:** December 23, 2025
+
+---
+
+## Quick Links
+
+- [YARA Documentation](https://yara.readthedocs.io/)
+- [Veeam Secure Restore Guide](https://helpcenter.veeam.com/docs/vbr/userguide/malware_detection_scan_backup_yara.html)
+- [GitHub Repository](https://github.com/lostSail0r/Veeam-Yara-Detection-Onion-)
+- [Report Issues](https://github.com/lostSail0r/Veeam-Yara-Detection-Onion-/issues)
